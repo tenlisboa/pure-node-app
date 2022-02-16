@@ -70,8 +70,64 @@ handlers._users = {
       });
     });
   },
-  GET: function (data, callback) {},
-  PUT: function (data, callback) {},
+
+  GET: function (data, callback) {
+    const phone =
+      typeof data.queryStringObject.phone === "string" &&
+      data.queryStringObject.phone.trim().length == 10
+        ? data.queryStringObject.phone
+        : null;
+
+    if (!phone) return callback(400, { error: "Missing required fields" });
+
+    _data.read("users", phone, function (err, data) {
+      if (err && !data) return callback(404);
+      delete data.hashedPassword;
+      callback(200, data);
+    });
+  },
+
+  PUT: function (data, callback) {
+    const firstName =
+      typeof data.payload.firstName === "string" &&
+      data.payload.firstName.trim().length > 0
+        ? data.payload.firstName
+        : null;
+
+    const lastName =
+      typeof data.payload.lastName === "string" &&
+      data.payload.lastName.trim().length > 0
+        ? data.payload.lastName
+        : null;
+
+    const phone =
+      typeof data.payload.phone === "string" &&
+      data.payload.phone.trim().length == 10
+        ? data.payload.phone
+        : null;
+
+    const password =
+      typeof data.payload.password === "string" &&
+      data.payload.password.trim().length > 0
+        ? data.payload.password
+        : null;
+
+    if (!phone) return callback(400, { error: "Missing required fields" });
+    if (!lastName && !firstName && !password)
+      return callback(400, { error: "Missing required fields" });
+    _data.read("users", phone, function (err, userData) {
+      if (err && !userData)
+        return callback(400, { error: "The specified user does not exist" });
+      if (firstName) userData.firstName = firstName;
+      if (lastName) userData.lastName = lastName;
+      if (password) userData.password = helpers.hash(password);
+
+      _data.update("users", phone, userData, function (err) {
+        if (err) return callback(500, { error: "Could not update user" });
+        callback(200);
+      });
+    });
+  },
   DELETE: function (data, callback) {},
 };
 
