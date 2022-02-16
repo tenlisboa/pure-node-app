@@ -39,6 +39,7 @@ httpsServer.listen(config.httpsPort, () => {
 const router = {
   sample: handlers.sample,
   users: handlers.users,
+  tokens: handlers.tokens,
 };
 
 function unifiedServer(request, response) {
