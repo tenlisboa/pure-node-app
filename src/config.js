@@ -4,12 +4,14 @@ environments.staging = {
   httpPort: 3000,
   httpsPort: 3001,
   envName: "staging",
+  hashingSecret: "thisIsOurSecret",
 };
 
 environments.production = {
   httpPort: 80,
   httpsPort: 443,
   envName: "production",
+  hashingSecret: "thisIsOurSecret",
 };
 
 const currentEnvironment =

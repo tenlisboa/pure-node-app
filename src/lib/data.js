@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const helpers = require("./helpers");
+
 const lib = {};
 
 lib.baseDir = path.join(__dirname, "/../.data");
@@ -35,7 +37,7 @@ lib.create = function (dir, file, data, callback) {
 
 lib.read = function (dir, file, callback) {
   fs.readFile(lib.baseDir + dir + "/" + file + ".json", function (err, data) {
-    callback(err, data);
+    callback(err, helpers.jsonToObject(data));
   });
 };
 

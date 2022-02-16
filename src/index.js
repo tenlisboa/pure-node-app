@@ -6,6 +6,9 @@ const config = require("./config");
 const fs = require("fs");
 const path = require("path");
 
+const handlers = require("./lib/handlers");
+const helpers = require("./lib/helpers");
+
 const httpServer = http.createServer((request, response) => {
   unifiedServer(request, response);
 });
@@ -33,18 +36,9 @@ httpsServer.listen(config.httpsPort, () => {
   );
 });
 
-const handlers = {};
-
-handlers.ping = (data, callback) => {
-  callback(200);
-};
-
-handlers.notFound = (data, callback) => {
-  callback(404);
-};
-
 const router = {
   sample: handlers.sample,
+  users: handlers.users,
 };
 
 function unifiedServer(request, response) {
@@ -77,7 +71,7 @@ function unifiedServer(request, response) {
       queryStringObject,
       method,
       headers,
-      payload: buffer,
+      payload: helpers.jsonToObject(buffer),
     };
 
     chosenHandler(data, (statusCode, payload) => {
