@@ -45,28 +45,33 @@ handlers._users = {
       return callback(400, { error: "Missing required fields" });
     }
 
-    _data.read("users", phone, function (err, data) {
-      if (err)
-        return callback(400, {
-          error: "A user with that phone number already exists",
+    const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+    handlers._tokens.VERIFY_TOKEN(token, phone, function (isValid) {
+
+      _data.read("users", phone, function (err, data) {
+        if (err)
+          return callback(400, {
+            error: "A user with that phone number already exists",
+          });
+
+        const hashedPassword = helpers.hash(password);
+
+        if (!hashedPassword)
+          return callback(400, { error: "Could not hash password" });
+
+        const userObject = {
+          firstName,
+          lastName,
+          phone,
+          hashedPassword,
+          tosAgreement,
+        };
+
+        _data.create("users", phone, userObject, function (err) {
+          if (err) return callback(400, { error: "Could not create user" });
+          callback(200);
         });
-
-      const hashedPassword = helpers.hash(password);
-
-      if (!hashedPassword)
-        return callback(400, { error: "Could not hash password" });
-
-      const userObject = {
-        firstName,
-        lastName,
-        phone,
-        hashedPassword,
-        tosAgreement,
-      };
-
-      _data.create("users", phone, userObject, function (err) {
-        if (err) return callback(400, { error: "Could not create user" });
-        callback(200);
       });
     });
   },
@@ -80,11 +85,17 @@ handlers._users = {
 
     if (!phone) return callback(400, { error: "Missing required fields" });
 
-    _data.read("users", phone, function (err, data) {
-      if (err && !data) return callback(404);
-      delete data.hashedPassword;
-      callback(200, data);
-    });
+    const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+    handlers._tokens.VERIFY_TOKEN(token, phone, function (isValid) {
+      if (!isValid) return callback(403, { error: "Unauthenticated"})
+
+      _data.read("users", phone, function (err, data) {
+        if (err && !data) return callback(404);
+        delete data.hashedPassword;
+        callback(200, data);
+      });
+    })
   },
 
   PUT: function (data, callback) {
@@ -115,16 +126,21 @@ handlers._users = {
     if (!phone) return callback(400, { error: "Missing required fields" });
     if (!lastName && !firstName && !password)
       return callback(400, { error: "Missing required fields" });
-    _data.read("users", phone, function (err, userData) {
-      if (err && !userData)
-        return callback(400, { error: "The specified user does not exist" });
-      if (firstName) userData.firstName = firstName;
-      if (lastName) userData.lastName = lastName;
-      if (password) userData.password = helpers.hash(password);
 
-      _data.update("users", phone, userData, function (err) {
-        if (err) return callback(500, { error: "Could not update user" });
-        callback(200);
+      const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+      handlers._tokens.VERIFY_TOKEN(token, phone, function (isValid) {
+        _data.read("users", phone, function (err, userData) {
+        if (err && !userData)
+          return callback(400, { error: "The specified user does not exist" });
+        if (firstName) userData.firstName = firstName;
+        if (lastName) userData.lastName = lastName;
+        if (password) userData.password = helpers.hash(password);
+
+        _data.update("users", phone, userData, function (err) {
+          if (err) return callback(500, { error: "Could not update user" });
+          callback(200);
+        });
       });
     });
   },
@@ -136,13 +152,18 @@ handlers._users = {
         : null;
 
     if (!phone) return callback(400, { error: "Missing required fields" });
-    _data.read("users", phone, function (err, userData) {
-      if (err && !userData)
-        return callback(400, { error: "The specified user does not exist" });
 
-      _data.delete("users", phone, function (err) {
-        if (err) return callback(500, { error: "Could not delete user" });
-        callback(200);
+    const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+    handlers._tokens.VERIFY_TOKEN(token, phone, function (isValid) {
+      _data.read("users", phone, function (err, userData) {
+        if (err && !userData)
+          return callback(400, { error: "The specified user does not exist" });
+
+        _data.delete("users", phone, function (err) {
+          if (err) return callback(500, { error: "Could not delete user" });
+          callback(200);
+        });
       });
     });
   },
@@ -157,9 +178,70 @@ handlers.tokens = function (data, callback) {
 };
 
 handlers._tokens = {
-  GET: function (data, callback) {},
-  PUT: function (data, callback) {},
-  DELETE: function (data, callback) {},
+  GET: function (data, callback) {
+    const id =
+      typeof data.queryStringObject.id === "string" &&
+      data.queryStringObject.id.trim().length == 20
+        ? data.queryStringObject.id
+        : null;
+
+    if (!id) return callback(400, { error: "Missing required fields" });
+
+    _data.read("tokens", id, function (err, data) {
+      if (err && !data) return callback(404);
+      callback(200, data);
+    });
+  },
+
+  PUT: function (data, callback) {
+    const id =
+      typeof data.payload.id === "string" && data.payload.id.trim().length == 20
+        ? data.payload.id
+        : null;
+
+    const extend =
+      typeof data.payload.extend === "string" &&
+      data.payload.extend.trim().length == true
+        ? data.payload.extend
+        : null;
+
+    if (!id || !extend)
+      return callback(400, { error: "Missing required fields" });
+
+    _data.read("tokens", id, function (err, data) {
+      if (err && !data) return callback(404, { error: "Token not found" });
+
+      if (data.expiresAt < Data.now())
+        return callback(401, { error: "Token expired" });
+
+      data.expiresAt = Data.now() + 1000 * 60 * 60;
+
+      _data.update("tokens", id, data, function (err) {
+        if (err) return callback(500, { error: "Could not update token" });
+
+        callback(200);
+      });
+    });
+  },
+
+  DELETE: function (data, callback) {
+    const id =
+      typeof data.payload.id === "string" && data.payload.id.trim().length == 10
+        ? data.payload.id
+        : null;
+
+    if (!id) return callback(400, { error: "Missing required fields" });
+    _data.read("tokens", id, function (err, data) {
+      if (err && !data)
+        return callback(400, { error: "The specified token does not exist" });
+
+      _data.delete("tokens", id, function (err) {
+        if (err) return callback(500, { error: "Could not delete token" });
+        callback(200);
+      });
+    });
+  },
+
   POST: function (data, callback) {
     const phone =
       typeof data.payload.phone === "string" &&
@@ -201,6 +283,14 @@ handlers._tokens = {
       });
     });
   },
+
+  VERIFY_TOKEN = function (id, phone, callback) {
+    _data.read('tokens', id, function (err, data) {
+      if (err || data.phone !== phone && data.expiresAt < Date.now()) callback(false)
+
+      callback(true);
+    })
+  }
 };
 
 handlers.ping = (data, callback) => {
