@@ -128,7 +128,24 @@ handlers._users = {
       });
     });
   },
-  DELETE: function (data, callback) {},
+  DELETE: function (data, callback) {
+    const phone =
+      typeof data.payload.phone === "string" &&
+      data.payload.phone.trim().length == 10
+        ? data.payload.phone
+        : null;
+
+    if (!phone) return callback(400, { error: "Missing required fields" });
+    _data.read("users", phone, function (err, userData) {
+      if (err && !userData)
+        return callback(400, { error: "The specified user does not exist" });
+
+      _data.delete("users", phone, function (err) {
+        if (err) return callback(500, { error: "Could not delete user" });
+        callback(200);
+      });
+    });
+  },
 };
 
 handlers.ping = (data, callback) => {
