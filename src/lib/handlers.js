@@ -157,13 +157,30 @@ handlers._users = {
     const token = typeof data.headers.token == "string" ? data.headers.token : null
 
     handlers._tokens.VERIFY_TOKEN(token, phone, function (isValid) {
+      if (!isValid) return callback(401, { error: "Unauthenticated"})
+
       _data.read("users", phone, function (err, userData) {
         if (err && !userData)
           return callback(400, { error: "The specified user does not exist" });
 
         _data.delete("users", phone, function (err) {
           if (err) return callback(500, { error: "Could not delete user" });
-          callback(200);
+
+          const userChecks = typeof userData.checks === "object" && userData.checks instanceof Array ? data.checks : [];
+          if (userChecks.lenght < 0) return callback(200);
+
+          let checksDeleted = 0;
+          let deletionErrors = false;
+          userChecks.forEach(function (checkId) {
+            _data.delete('checks', checkId, function (err) {
+              if (err) deletionErrors = true;
+
+              checksDeleted++;
+              if (checksDeleted === userChecks.length && !deletionErrors) return callback(200)
+
+              callback(500, { error: "Errors encountered while deleting users checks, all checks may not have been deleted" });
+            })
+          })
         });
       });
     });
@@ -464,7 +481,47 @@ handlers._checks = {
     })
   },
 
-  DELETE: function (data, callback) {},
+  DELETE: function (data, callback) {
+    const id =
+      typeof data.queryStringObject.id === "string" &&
+      data.queryStringObject.id.trim().length == 10
+        ? data.queryStringObject.id
+        : null;
+
+    if (!id) return callback(400, { error: "Missing required fields" });
+
+    _data.read('checks', id, function(err, checkData) {
+      if (err) return callback(400, {error: 'THe specified checkId is invalid'});
+
+      const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+      handlers._tokens.VERIFY_TOKEN(token, checkData.userPhone, function (isValid) {
+        if (!isValid) return callback(401, {error: 'Unauthenticated'})
+
+        _data.delete("checks", id, function (err) {
+          if (err) return callback(500, { error: "Could not delete the check" });
+
+          _data.read("users", checkData.userPhone, function (err, userData) {
+            if (err && !userData)
+              return callback(400, { error: "The check user creator does not exist" });
+
+              const userChecks = typeof userData.checks === "object" && userData.checks instanceof Array ? data.checks : [];
+              const checkPosition = userChecks.indexOf(id)
+              if (checkPosition === -1) return callback(500, {error: 'Could not find the check in the users check lists'})
+
+              userChecks.splice(checkPosition, 1)
+
+              _data.update('users', checkData.userPhone, userData, function (err) {
+                if (err) return callback(500, {error: "Could not delete the check from the users check lists"})
+
+                callback(200)
+              })
+          });
+        });
+
+      });
+    })
+  },
 };
 
 handlers.ping = (data, callback) => {
