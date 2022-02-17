@@ -196,8 +196,8 @@ handlers._tokens = {
 
   PUT: function (data, callback) {
     const id =
-      typeof data.payload.id === "string" && data.payload.id.trim().length == 20
-        ? data.payload.id
+      typeof data.queryStringObject.id === "string" && data.queryStringObject.id.trim().length == 20
+        ? data.queryStringObject.id
         : null;
 
     const extend =
@@ -227,8 +227,8 @@ handlers._tokens = {
 
   DELETE: function (data, callback) {
     const id =
-      typeof data.payload.id === "string" && data.payload.id.trim().length == 10
-        ? data.payload.id
+      typeof data.queryStringObject.id === "string" && data.queryStringObject.id.trim().length > 0
+        ? data.queryStringObject.id
         : null;
 
     if (!id) return callback(400, { error: "Missing required fields" });
@@ -306,7 +306,7 @@ handlers._checks = {
   GET: function (data, callback) {
     const id =
     typeof data.queryStringObject.id === "string" &&
-    data.queryStringObject.id.trim().length == 10
+    data.queryStringObject.id.trim().length > 0
       ? data.queryStringObject.id
       : null;
 
@@ -399,7 +399,71 @@ handlers._checks = {
       })
     })
   },
-  PUT: function (data, callback) {},
+
+  PUT: function (data, callback) {
+    const id =
+      typeof data.queryStringObject.id === "string" &&
+      data.queryStringObject.id.trim().length > 0
+        ? data.queryStringObject.id
+        : null;
+
+    const protocol =
+      typeof data.payload.protocol === "string" &&
+      ['https', 'http'].indexOf(data.payload.protocol) > -1
+        ? data.payload.protocol
+        : null;
+
+    const url =
+      typeof data.payload.url === "string" &&
+      data.payload.url.trim().length > 0
+        ? data.payload.url
+        : null;
+
+    const method =
+      typeof data.payload.method === "string" &&
+      ['POST', 'GET', 'PUT', 'DELETE'].indexOf(data.payload.method) > -1
+        ? data.payload.method
+        : null;
+
+    const successCodes =
+      typeof data.payload.successCodes === "object" &&
+      data.payload.successCodes instanceof Array && data.payload.successCodes.length > 0
+        ? data.payload.successCodes
+        : null;
+
+    const timeoutSeconds =
+      typeof data.payload.timeoutSeconds === "number" &&
+      data.payload.timeoutSeconds % 1 === 0 && data.payload.timeoutSeconds >= 1 && data.payload.timeoutSeconds <= 5
+        ? data.payload.timeoutSeconds
+        : null;
+
+    if (!id) callback(400, {error: "Missing required fields"})
+
+    if (!protocol && !url && !method && !successCodes && !timeoutSeconds) callback(400, {error: "Missing fields to update"})
+
+    _data.read('checks', id, function(err, checkData) {
+      if (err) callback(404, {error: 'Check id did not exist'});
+
+      const token = typeof data.headers.token === "string" ? data.headers.token : null
+
+      handlers._tokens.VERIFY_TOKEN(token, checkData.userphone, function (isValid) {
+        if (!isValid) return callback(403, { error: "Unauthenticated"})
+
+        if (protocol) checkData.protocol = protocol;
+        if (url) checkData.url = url;
+        if (method) checkData.method = method;
+        if (successCodes) checkData.successCodes = success;
+        if (timeoutSeconds) checkData.timeoutSeconds;
+
+        _data.update('checks', id, checkData, function (err) {
+          if (err) callback(500, {error: 'Could not update check'})
+
+          callback(200)
+        })
+      })
+    })
+  },
+
   DELETE: function (data, callback) {},
 };
 
