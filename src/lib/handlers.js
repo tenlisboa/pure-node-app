@@ -1,5 +1,6 @@
 const _data = require("./data");
 const helpers = require("./helpers");
+const config = require("../config");
 
 const handlers = {};
 
@@ -291,6 +292,93 @@ handlers._tokens = {
       callback(true);
     })
   }
+};
+
+handlers.checks = function (data, callback) {
+  const acceptableMethods = ["POST", "PUT", "GET", "DELETE"];
+  if (acceptableMethods.indexOf(data.method) <= -1) {
+    return callback(405);
+  }
+  handlers._checks[data.method](data, callback);
+}
+
+handlers._checks = {
+  GET: function (data, callback) {},
+  POST: function (data, callback) {
+    const protocol =
+      typeof data.payload.protocol === "string" &&
+      ['https', 'http'].indexOf(data.payload.protocol) > -1
+        ? data.payload.protocol
+        : null;
+
+    const url =
+      typeof data.payload.url === "string" &&
+      data.payload.url.trim().length > 0
+        ? data.payload.url
+        : null;
+
+    const method =
+      typeof data.payload.method === "string" &&
+      ['POST', 'GET', 'PUT', 'DELETE'].indexOf(data.payload.method) > -1
+        ? data.payload.method
+        : null;
+
+    const successCodes =
+      typeof data.payload.successCodes === "object" &&
+      data.payload.successCodes instanceof Array && data.payload.successCodes.length > 0
+        ? data.payload.successCodes
+        : null;
+
+    const timeoutSeconds =
+      typeof data.payload.timeoutSeconds === "number" &&
+      data.payload.timeoutSeconds % 1 === 0 && data.payload.timeoutSeconds >= 1 && data.payload.timeoutSeconds <= 5
+        ? data.payload.timeoutSeconds
+        : null;
+
+    if (!protocol && !url && !method && !successCodes && !timeoutSeconds) callback(400, {error: "invalid inputs"})
+
+    const token = typeof data.headers.token === "string" ? data.headers.token : null
+
+    _data.read('tokens', token, function(err, tokenData) {
+      if (err) return callback(403)
+
+      const userPhone = tokenData.phone;
+
+      _data.read('users', userPhone, function(err, userData) {
+        if (err) return callback(404, {error: "There is no user with that token"})
+
+        const userChecks = typeof userData.checks === "object" && userData.checks instanceof Array ? data.checks : [];
+
+        if (userChecks.length > config.maxChecks) callback(400, {error: "Too many checks"})
+
+        const checkId = helpers.createRandomString(20);
+
+        const checkObject =  {
+          id: checkId,
+          userPhone,
+          protocol,
+          url,
+          method,
+          successCodes,
+          timeoutSeconds
+        }
+
+        _data.create('checks', checkId, checkObject, function(err) {
+          if (err) return callback(500, {error: 'Could not create check'})
+
+          userData.checks = [...userChecks, checkObject];
+
+          _data.update('users', userPhone, userData, function(err) {
+            if (err) return callback(500, { error: 'Could not update the users with the new check'})
+
+            return callback(200, checkObject)
+          })
+        })
+      })
+    })
+  },
+  PUT: function (data, callback) {},
+  DELETE: function (data, callback) {},
 };
 
 handlers.ping = (data, callback) => {
