@@ -303,7 +303,29 @@ handlers.checks = function (data, callback) {
 }
 
 handlers._checks = {
-  GET: function (data, callback) {},
+  GET: function (data, callback) {
+    const id =
+    typeof data.queryStringObject.id === "string" &&
+    data.queryStringObject.id.trim().length == 10
+      ? data.queryStringObject.id
+      : null;
+
+    if (!id) return callback(400, { error: "Missing required fields" });
+
+    _data.read(checks, id, function (err, checkData) {
+      if (err) return callback(404);
+
+      const token = typeof data.headers.token == "string" ? data.headers.token : null
+
+      handlers._tokens.VERIFY_TOKEN(token, checkData.userphone, function (isValid) {
+        if (!isValid) return callback(403, { error: "Unauthenticated"})
+
+        callback(200, checkData);
+      })
+    })
+
+  },
+
   POST: function (data, callback) {
     const protocol =
       typeof data.payload.protocol === "string" &&
