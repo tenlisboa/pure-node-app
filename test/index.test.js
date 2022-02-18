@@ -3,6 +3,7 @@ _app = {};
 _app.tests = {};
 
 _app.tests.unit = require("./unit.test");
+_app.tests.api = require("./api.test");
 
 _app.countTests = function () {
   var counter = 0;
