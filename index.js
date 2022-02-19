@@ -22,7 +22,7 @@ app.init = function (callback) {
   // Start the cli
   setTimeout(function () {
     cli.init();
-    callback();
+    if (callback) callback();
   }, 50);
 };
 
